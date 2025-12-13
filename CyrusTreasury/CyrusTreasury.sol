@@ -41,11 +41,15 @@ contract CyrusTreasury is Ownable,  ReentrancyGuard {
 
     uint256 constant PERCENT_DIVIDER = 1000;
     uint256 constant public TIME_STEP = 1 days;
+    uint256 constant public PERFOMANCE_FEE = 170; //17%
+    
 
     IPancakePositionManager constant PancakePositionManager = IPancakePositionManager(0x46A15B0b27311cedF172AB29E4f4766fbE7F4364);
     IPancakeV3Factory constant PancakeFactory = IPancakeV3Factory(0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865);
 
     IERC20 public constant USDT = IERC20(0x55d398326f99059fF775485246999027B3197955);
+
+    address public constant performanceFeeReceiver = address(0x6Cd7bbB8a8C0C1B24a449c3AD8F913974de7b009);
 
     // address => how many rewards earned from friends
     mapping(address => mapping(uint256 => uint256)) public affiliatesRewards;
@@ -158,9 +162,16 @@ contract CyrusTreasury is Ownable,  ReentrancyGuard {
 
         CyrusPositionManager.updatePosition(tokenId, updatedPosition);
 
-        withdrawUSDTFromAny(totalAmount, msg.sender);
+        uint256 perfomanceFee = totalAmount * PERFOMANCE_FEE / PERCENT_DIVIDER;
+        uint256 amountWithFee = totalAmount - perfomanceFee;
 
-        emit ClaimedPositionRewards(msg.sender, totalAmount, block.timestamp,tokenId);
+        if(perfomanceFee > 0) {
+            withdrawUSDTFromAny(perfomanceFee, performanceFeeReceiver);
+        }
+
+        withdrawUSDTFromAny(amountWithFee, msg.sender);
+
+        emit ClaimedPositionRewards(msg.sender, amountWithFee, block.timestamp,tokenId);
     }
 
     function exit(uint256 tokenId) external nonReentrant {
@@ -188,7 +199,13 @@ contract CyrusTreasury is Ownable,  ReentrancyGuard {
 
         CyrusPositionManager.updatePosition(tokenId, updatedPosition);
 
-        uint256 toWithdraw = totalAmount + positionInfo.amount;
+        uint256 feeAmount = totalAmount * PERFOMANCE_FEE / PERCENT_DIVIDER;
+
+        uint256 toWithdraw = totalAmount + positionInfo.amount - feeAmount;
+
+        if(feeAmount > 0) {
+            withdrawUSDTFromAny(feeAmount, performanceFeeReceiver);
+        }
 
         withdrawUSDTFromAny(toWithdraw, msg.sender);
 
