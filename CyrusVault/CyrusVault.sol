@@ -51,6 +51,7 @@ contract CyrusVault is Ownable {
     }
 
     function _openPosition(uint256 usdtAmount, uint256 strategyId, address to, address affiliate) internal {
+        setAffiliate(affiliate, usdtAmount);
 
         uint256 tokenId = CyrusPositionManager.mint(to, MintCyrusParams({
             strategyId: strategyId,
@@ -59,9 +60,6 @@ contract CyrusVault is Ownable {
             finish: block.timestamp + strategies[strategyId]
            
         }));
-
-
-        setAffiliate(affiliate, usdtAmount);
 
         uint256 len = tokenIds.length;
         uint256 share = usdtAmount / len;
@@ -81,35 +79,34 @@ contract CyrusVault is Ownable {
 
 
     function setAffiliate(address _affiliate, uint256 _positionAmount) internal {
-    
-    //check if user has positions already
-    if(CyrusPositionManager.tokensOfOwner(msg.sender).length > 0) return;
+    bool isFirstDeposit = CyrusPositionManager.tokensOfOwner(msg.sender).length == 0;
 
-    if (_affiliate == address(0) || _affiliate == msg.sender) return;
+    if (isFirstDeposit) {
+        if (_affiliate == address(0) || _affiliate == msg.sender) return;
+        if (affiliates[msg.sender] != address(0)) return;
 
-    if (affiliates[msg.sender] != address(0)) return;
+        address upline = _affiliate;
 
-    address upline = _affiliate;
-    for (uint256 i = 0; i < 20; i++) {
-        if (upline == address(0)) break;
-        if (upline == msg.sender) {
-            return;
+        for (uint256 level = 0; level < 20; level++) {
+            if (upline == address(0)) break;
+
+            if (upline == msg.sender) return;
+
+            affiliatesNumber[upline][level] += 1;
+
+            upline = affiliates[upline];
         }
-        upline = affiliates[upline];
+
+        affiliates[msg.sender] = _affiliate;
     }
 
-    affiliates[msg.sender] = _affiliate;
-
-    upline = _affiliate;
-    for (uint256 i = 0; i < 20; i++) {
-        if (upline == address(0)) break;
-
-        affiliatesNumber[upline][i] += 1;
-        affiliatesTurnover[upline] += _positionAmount;
-
-        upline = affiliates[upline];
+        address referrer = affiliates[msg.sender];
+        for (uint256 i = 0; i < 20; i++) {
+            if (referrer == address(0)) break;
+            affiliatesTurnover[referrer] += _positionAmount;
+            referrer = affiliates[referrer];
+        }
     }
-}
     /**
  * @notice Adds USDT liquidity to an existing Pancake position with up to 0.5% slippage tolerance.
  * @dev The actual added liquidity may be slightly less than the requested amount due to price movement
